@@ -1,0 +1,14 @@
+{
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingModuleSource": "none"
+    },
+    "micropico.openOnStart": true,
+    "python.analysis.typeshedPaths": [
+        "~/.micropico-stubs/micropython-esp32-stubs==1.28.0.post4"
+    ],
+    "python.analysis.extraPaths": [
+        "~/.micropico-stubs/micropython-esp32-stubs==1.28.0.post4"
+    ]
+}
