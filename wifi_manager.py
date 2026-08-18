@@ -24,13 +24,14 @@
 #    - Save credentials to "wifi_config.json"
 #    - Reboot the microcontroller
 
-from micropython import const
 import gc
 import json
-import machine
-import network
 import socket
 import time
+
+import machine
+import network
+from micropython import const
 
 _CONFIG_FILE = const("wifi_config.json")
 _AP_SSID = const("MicroPython-Wifi")
@@ -92,10 +93,10 @@ def _ap_page(networks: list) -> str:
         else:
             bars = "▂▁▁▁"
         net_rows += (
-            '<div class="net-item" onclick="setSsid(\'%s\')">'
-            '\U0001f6dc %s <span style="float:right;color:#888;font-size:.75rem">%s</span>'
+            f'<div class="net-item" onclick="setSsid(\'{escaped}\')">'
+            f'\U0001f6dc {escaped} <span style="float:right;color:#888;font-size:.75rem">{bars}</span>'
             "</div>\n"
-        ) % (escaped, escaped, bars)
+        )
     if not net_rows:
         net_rows = '<div class="net-item net-none">No networks found</div>\n'
     return _load_portal_html().replace("{{NETWORKS}}", net_rows)
@@ -167,7 +168,7 @@ def _handle(client, networks: list) -> bool:
         html = _ap_page(networks)
         client.sendall(_HTTP_OK + html.encode())
         return False
-    except Exception as e:
+    except (OSError, ValueError, MemoryError) as e:
         print(f"⚠️ WiFi config server error: {e}")
         return False
     finally:
@@ -207,7 +208,7 @@ def _scan_networks() -> list:
                 nets[ssid] = rssi
         del results
         gc.collect()
-    except Exception as e:
+    except (OSError, ValueError, MemoryError) as e:
         print(f"⚠️ Scan failed: {e}")
     return sorted(nets.items(), key=lambda x: x[1], reverse=True)
 
@@ -221,7 +222,7 @@ def _config_portal(networks: list, ap_ssid: str = _AP_SSID) -> None:
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(addr)
     s.listen(1)
-    print(f"🌐 Config portal  →  http://{_AP_IP}/")
+    print(f"🌐 Config portal → http://{_AP_IP}/")
 
     reboot: bool = False
     while not reboot:
@@ -229,7 +230,7 @@ def _config_portal(networks: list, ap_ssid: str = _AP_SSID) -> None:
             client, addr = s.accept()
             print(f"   Client connected: {addr}")
             reboot = _handle(client, networks)
-        except Exception as e:
+        except (OSError, MemoryError) as e:
             print(f"⚠️ Portal error: {e}")
             time.sleep(1)
 
