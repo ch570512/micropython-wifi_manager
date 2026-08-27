@@ -14,15 +14,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Flow on boot:
-# 1. Try to connect using saved (not encrypted) credentials from _CONFIG_FILE
-# 2. If connected → return WLAN interface to caller
-# 3. If no saved credentials or connection fails:
-#    - Start an Access Point _AP_SSID
-#    - Serve a web portal at _AP_IP where user enters SSID + password
-#    - Save credentials to "wifi_config.json"
-#    - Reboot the microcontroller
 
 import gc
 import json
@@ -53,7 +44,7 @@ def _load_portal_html() -> str:
 
 
 def load_credentials() -> dict | None:
-    """Load saved WiFi credentials from flash file. Returns dict or None."""
+    """Load WiFi credentials from flash file. Returns dict or None."""
     try:
         with open(_CONFIG_FILE, "r") as f:
             data = json.load(f)
@@ -67,7 +58,7 @@ def load_credentials() -> dict | None:
 
 
 def save_credentials(ssid: str, password: str) -> None:
-    """Persist WiFi credentials to flash file."""
+    """Save WiFi credentials to flash file."""
     try:
         with open(_CONFIG_FILE, "w") as f:
             json.dump({"ssid": ssid, "password": password}, f)
@@ -175,8 +166,14 @@ def _handle(client, networks: list) -> bool:
         client.close()
 
 
-def _start_ap(ap_ssid: str = _AP_SSID) -> network.WLAN:
-    """Start the microcontroller in Access Point mode on channel 6."""
+def _start_ap(ap_ssid: str = _AP_SSID, on_ap=None) -> network.WLAN:
+    """Start the microcontroller in Access Point mode on channel 6.
+
+    Args:
+        ap_ssid: SSID for the configuration AP.
+        on_ap: Optional callback invoked once the AP is active. It is
+            called with ``(ssid, ip)``.
+    """
     ap = network.WLAN(network.AP_IF)
     ap.active(True)
     ap.config(essid=ap_ssid, authmode=network.AUTH_OPEN, channel=6)
@@ -185,6 +182,8 @@ def _start_ap(ap_ssid: str = _AP_SSID) -> network.WLAN:
         if ap.active():
             break
         time.sleep(0.25)
+    if on_ap is not None:
+        on_ap(ap_ssid, _AP_IP)
     return ap
 
 
@@ -213,9 +212,9 @@ def _scan_networks() -> list:
     return sorted(nets.items(), key=lambda x: x[1], reverse=True)
 
 
-def _config_portal(networks: list, ap_ssid: str = _AP_SSID) -> None:
+def _config_portal(networks: list, ap_ssid: str = _AP_SSID, on_ap=None) -> None:
     """Run the AP + web portal until the user submits valid credentials."""
-    ap = _start_ap(ap_ssid)
+    ap = _start_ap(ap_ssid, on_ap)
 
     addr = socket.getaddrinfo("0.0.0.0", 80)[0][-1]
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -240,11 +239,13 @@ def _config_portal(networks: list, ap_ssid: str = _AP_SSID) -> None:
     machine.reset()
 
 
-def connect(ap_ssid: str = _AP_SSID) -> network.WLAN:
+def connect(ap_ssid: str = _AP_SSID, on_ap=None) -> network.WLAN:
     """Main entry point: try saved WiFi, fall back to AP config portal.
 
     Args:
         ap_ssid: SSID for the configuration AP (default: MicroPython-Wifi).
+        on_ap: Optional callback invoked when the configuration AP becomes
+            active. Called with ``(ssid, ip)``.
 
     Returns a connected ``network.WLAN`` interface (STA_IF).
     """
@@ -275,6 +276,6 @@ def connect(ap_ssid: str = _AP_SSID) -> network.WLAN:
     wlan.active(False)
 
     print("📡 No (valid) saved network")
-    _config_portal(networks, ap_ssid)
+    _config_portal(networks, ap_ssid, on_ap)
     # Never reaches here — machine.reset() is called inside _config_portal
     return wlan
